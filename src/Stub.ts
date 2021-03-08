@@ -12,8 +12,8 @@ module Eureca {
     export class Stub {
 
         private static callbacks: any = {};
-        private serialize:Function;
-        private deserialize:Function;
+        private serialize: Function;
+        private deserialize: Function;
         // Constructor
         constructor(public settings: any = {}) {
             //this.callbacks = {};
@@ -45,16 +45,16 @@ module Eureca {
 
         //invoke remote function by creating a proxyObject and sending function name and arguments to the remote side
         public invokeRemoteOld(context, fname, socket, ...args) {
-            
+
             var proxyObj = {
                 status: 0,
                 result: null,
                 error: null,
                 sig: null,
-                callback: function () { },
-                errorCallback: function () { },
+                callback: function() { },
+                errorCallback: function() { },
                 //TODO : use the standardized promise syntax instead of onReady
-                then: function (fn, errorFn) {
+                then: function(fn, errorFn) {
                     if (this.status != 0) {
 
                         if (this.error == null)
@@ -95,15 +95,15 @@ module Eureca {
             if (argsArray.length > 0) RMIObj[Protocol.argsId] = argsArray;
 
 
-            
+
             socket.send(this.settings.serialize.call(context, RMIObj));
 
-            
+
             return proxyObj;
         }
 
         public invokeRemote(context, fname, socket, ...args) {
-            
+
             let resolveCB: any;
             let rejectCB: any;
             var proxyObj = new EurecaPromise((resolve, reject) => {
@@ -141,12 +141,12 @@ module Eureca {
          * Generate proxy functions allowing to call remote functions
          */
         public importRemoteFunction(handle, socket, functions/*, serialize=null*/) {
-            
+
 
             var _this = this;
             if (functions === undefined) return;
             for (var i = 0; i < functions.length; i++) {
-                (function (idx, fname) {
+                (function(idx, fname) {
                     var proxy = handle;
                     /* namespace parsing */
                     var ftokens = fname.split('.');
@@ -158,13 +158,13 @@ module Eureca {
                     /* end namespace parsing */
 
                     //TODO : do we need to re generate proxy function if it's already declared ?
-                    proxy[_fname] = function (...args) {
-                        
+                    proxy[_fname] = function(...args) {
+
                         args.unshift(socket);
                         args.unshift(fname);
                         args.unshift(proxy[_fname]);
                         return _this.invokeRemote.apply(_this, args);
-                        
+
                         /*
                         var proxyObj = {
                             status: 0,
@@ -223,7 +223,7 @@ module Eureca {
 
                         return proxyObj;
                         */
-                        
+
                     }
                 })(i, functions[i]);
             }
@@ -281,7 +281,16 @@ module Eureca {
 
                 if (socket && obj[Protocol.signatureId] && !context.async) {
 
-                    this.sendResult(socket, obj[Protocol.signatureId], result, null);
+                    if (result instanceof Promise) {
+                        (result as any)
+                            .then(() => {
+                                this.sendResult(socket, obj[Protocol.signatureId], result, null);
+                                obj[Protocol.argsId].unshift(socket);
+                                if (typeof func.onCall == 'function') func.onCall.apply(context, obj[Protocol.argsId]);
+                            })
+                    } else {
+                        this.sendResult(socket, obj[Protocol.signatureId], result, null);
+                    }
                     /*
                     var retObj = {};
                     retObj[Protocol.signatureId] = obj[Protocol.signatureId];
@@ -291,13 +300,14 @@ module Eureca {
 
                 }
 
-                obj[Protocol.argsId].unshift(socket);
-                if (typeof func.onCall == 'function') func.onCall.apply(context, obj[Protocol.argsId]);
+                if (!(result instanceof Promise)) {
+                    obj[Protocol.argsId].unshift(socket);
+                    if (typeof func.onCall == 'function') func.onCall.apply(context, obj[Protocol.argsId]);
+                }
             } catch (ex) {
                 console.log('EURECA Invoke exception!! ', ex.stack);
             }
 
         }
     }
-
 }
